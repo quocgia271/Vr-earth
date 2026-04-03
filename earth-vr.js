@@ -9,7 +9,6 @@ class EarthVRSimulation {
         this.camera = null;
         this.renderer = null;
         this.earth = null;
-        this.earthNight = null;
         this.clouds = null;
         this.frameCount = 0;
         this.lastTime = performance.now();
@@ -249,11 +248,13 @@ class EarthVRSimulation {
         const dayTexture = this.createEarthTexture();
         const nightTexture = this.createNightmapTexture();
         
-        // Create Day Earth material with standard lighting
+        // Create Day Earth material with night map as emissive overlay
         const dayMaterial = new THREE.MeshPhongMaterial({
             map: dayTexture,
+            emissiveMap: nightTexture,
+            emissive: 0x444444,
+            emissiveIntensity: 0.6,
             shininess: 10,
-            emissive: 0x000000,
             specular: 0x222222,
             wireframe: false,
             flatShading: false,
@@ -265,25 +266,8 @@ class EarthVRSimulation {
         this.earth.castShadow = false;
         this.scene.add(this.earth);
         
-        // Create Night Earth overlay - city lights on dark side
-        const nightMaterial = new THREE.MeshPhongMaterial({
-            emissiveMap: nightTexture,
-            emissive: 0x888888,
-            emissiveIntensity: 1.5,
-            transparent: true,
-            opacity: 0.8,
-            side: THREE.FrontSide,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-        
-        this.earthNight = new THREE.Mesh(geometry, nightMaterial);
-        this.earthNight.position.z = 0.0001;  // Prevent z-fighting
-        this.scene.add(this.earthNight);
-        
-        // Store textures and material for updates
+        // Store material for updates
         this.dayMaterial = dayMaterial;
-        this.nightMaterial = nightMaterial;
         
         // Add atmospheric glow for realism
         this.addAtmosphericGlow();
@@ -899,9 +883,6 @@ class EarthVRSimulation {
     update() {
         if (this.earth) {
             this.earth.rotation.y += 0.001; // Earth rotates
-        }
-        if (this.earthNight) {
-            this.earthNight.rotation.y += 0.001; // Night Earth rotates with day earth
         }
         if (this.clouds) {
             this.clouds.rotation.y += 0.001; // Clouds rotate WITH Earth (same speed - physics accurate)
