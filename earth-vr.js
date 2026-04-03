@@ -240,7 +240,8 @@ class EarthVRSimulation {
     }
 
     // Create Earth sphere
-    createEarth() {
+  // Create Earth sphere
+  createEarth() {
         // High-resolution sphere for smooth appearance
         const geometry = new THREE.IcosahedronGeometry(1, 64);
         
@@ -252,15 +253,66 @@ class EarthVRSimulation {
         const dayMaterial = new THREE.MeshPhongMaterial({
             map: dayTexture,
             emissiveMap: nightTexture,
-            emissive: 0x444444,
-            emissiveIntensity: 0.6,
+            emissive: 0xffffff,        
+            emissiveIntensity: 1,
             shininess: 10,
             specular: 0x222222,
             wireframe: false,
             flatShading: false,
             side: THREE.FrontSide
         });
-        
+
+        // =========================================================
+        // ✨ ĐOẠN CODE SHADER XỬ LÝ CHUYỂN NGÀY/ĐÊM VÀ LỌC NỀN ✨
+        // =========================================================
+        dayMaterial.onBeforeCompile = function(shader) {
+            // Khai báo vị trí Mặt Trời giống hệt với file createLighting()
+            shader.uniforms.sunPosition = { value: new THREE.Vector3(15, 8, 10).normalize() };
+            
+            // Truyền Vector pháp tuyến bề mặt (world normal) sang Fragment Shader
+            shader.vertexShader = `
+                varying vec3 vWorldNormal;
+            ` + shader.vertexShader;
+            
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <worldpos_vertex>',
+                `
+                #include <worldpos_vertex>
+                vWorldNormal = normalize(mat3(modelMatrix) * normal);
+                `
+            );
+            
+            // Xử lý logic bật/tắt đèn dựa trên hướng mặt trời
+            shader.fragmentShader = `
+                uniform vec3 sunPosition;
+                varying vec3 vWorldNormal;
+            ` + shader.fragmentShader;
+            
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <emissivemap_fragment>',
+                `
+                #include <emissivemap_fragment>
+                
+                #ifdef USE_EMISSIVEMAP
+                    // 1. Tính toán vùng tối (ban đêm)
+                    float sunDot = dot(normalize(vWorldNormal), normalize(sunPosition));
+                    
+                    // 0.25: Bắt đầu bật đèn từ hoàng hôn, -0.05: Sáng 100% khi tối hẳn
+                    float nightMask = 1.0 - smoothstep(-0.05, 0.25, sunDot);
+                    
+                    // 2. LỌC BỎ NỀN XANH ĐEN (Cắt ngưỡng)
+                    // Ép các mảng màu tối (dưới 0.15) thành đen thui tuyệt đối
+                    totalEmissiveRadiance = max(vec3(0.0), totalEmissiveRadiance - 0.15);
+                    
+                    // 3. KHUẾCH ĐẠI ĐÈN THÀNH PHỐ
+                    // Nhân mặt nạ ngày/đêm và tăng độ sáng lên 5.0 lần (hoặc hơn)
+                    totalEmissiveRadiance *= nightMask * 5.0; 
+                #endif
+                `
+            );
+        };
+        // =========================================================
+
         this.earth = new THREE.Mesh(geometry, dayMaterial);
         this.earth.receiveShadow = false;
         this.earth.castShadow = false;
@@ -391,95 +443,108 @@ class EarthVRSimulation {
     }
     
     // Create visual representation of the sun
+    // Create visual representation of the sun
+    // Create an advanced volumetric, pulsating sun visual using a single shader sphere
+    // Create an advanced volumetric, pulsating sun visual using Fresnel Effect
+  // Create an advanced textured, volumetric, pulsating sun visual
+   // Create an advanced textured, volumetric, fiercely burning sun
+   // Create a 3D Textured Sun with independent Volumetric Glow
+// Create a 3D Textured Sun with independent *SUPER* Volumetric Glow
+  // Create a 3D Textured Sun with independent, soft, pulsating Glow
     createSunVisual() {
         const textureLoader = new THREE.TextureLoader();
-        let sunTexture = null;
-        
-        // Load sun.jpg
+        let sunMap;
         try {
-            sunTexture = textureLoader.load('./sun.jpg');
-            console.log('✓ Sun texture loaded from sun.jpg');
+            sunMap = textureLoader.load('./sun.jpg');
         } catch (error) {
-            console.warn('⚠️ Sun.jpg not found');
-            sunTexture = this.createSunTexture();
+            console.warn('sun.jpg not found, using fallback.');
+            sunMap = this.createFallbackSunTexture();
         }
+
+        // ==========================================
+        // 1. LỚP LÕI (CORE): Quả cầu 3D vật lý (Giữ chi tiết sun.jpg)
+        // ==========================================
+        // Bán kính 1.5, hiển thị texture sắc nét
+        const coreGeometry = new THREE.IcosahedronGeometry(1.5, 64);
         
-        // Main sun sphere - bright with strong self-illumination
-        const sunGeometry = new THREE.IcosahedronGeometry(0.3, 64);
-        const sunMaterial = new THREE.MeshPhongMaterial({
-            map: sunTexture,
-            color: 0xffff99,              // Bright yellow base
-            emissive: 0xffff88,           // Strong self-illumination
-            emissiveIntensity: 2.0,       // Makes center bright
-            specular: 0xffff00,           // Yellow specular
-            shininess: 50,
-            wireframe: false,
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            map: sunMap,
+            color: 0xffffff 
+        });
+        
+        const sunCore = new THREE.Mesh(coreGeometry, coreMaterial);
+        sunCore.position.set(45, 24, 30);
+        this.scene.add(sunCore);
+        
+        this.sun = sunCore; // Để xoay trong update()
+
+        // ==========================================
+        // 2. LỚP HÀO QUANG (GLOW): *NÂNG CẤP ĐỂ GỌN & MƯỢT*
+        // ==========================================
+        this.sunUniforms = { uTime: { value: 0 } };
+        
+        // ✨ THAY ĐỔI 1: BÁN KÍNH NHỎ LẠI
+        // Giảm bán kính từ 3.0 xuống 1.8 để quầng sáng gọn gàng, ôm sát lõi (1.5)
+        const glowGeometry = new THREE.IcosahedronGeometry(1.8, 64);
+        
+        const glowMaterial = new THREE.ShaderMaterial({
+            uniforms: this.sunUniforms,
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    vViewPosition = -normalize(mvPosition.xyz);
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+
+                void main() {
+                    float intensity = dot(normalize(vNormal), normalize(vViewPosition));
+                    intensity = max(0.0, intensity);
+
+                    // ✨ THAY ĐỔI 2: PHẬP PHỒNG CHẬM MƯỢT LẠI (sin * 1.5)
+                    // Giảm tốc độ phập phồng từ 5.0 xuống 1.5 để tạo cảm giác êm ái
+                    float pulse = sin(uTime * 1.5) * 0.1 + 0.9;
+
+                    // ✨ THAY ĐỔI 3: SỬA LỖI HÀO QUANG ĐÈ LÊN MẶT TRỜI
+                    // Tăng lũy thừa falloff lên 3.5 (thay vì 1.8). Số lớn làm cường độ
+                    // giảm cực nhanh khi đi vào tâm (intensity -> 1.0),
+                    // giúp vùng giữa hào quang rất trong suốt, hiện rõ lõi 3D.
+                    float alpha = pow(intensity, 3.5);
+
+                    // Màu quầng lửa (Cam đỏ gắt)
+                    vec3 glowColor = vec3(1.0, 0.3, 0.0);
+
+                    // ✨ THAY ĐỔI 4: ĐIỀU CHỈNH CƯỜNG ĐỘ (Nhân 2.0 thay vì 3.0)
+                    // Làm cho hào quang rõ nhưng không quá chói lóa,
+                    // kết hợp với alpha tan mượt tạo quầng sáng mọng.
+                    gl_FragColor = vec4(glowColor * alpha * 2.0 * pulse, alpha * pulse);
+                }
+            `,
+            transparent: true,
+            blending: THREE.AdditiveBlending, // Cộng dồn ánh sáng
+            depthWrite: false, 
             side: THREE.FrontSide
         });
-        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
-        sun.position.set(15, 8, 10);
-        this.scene.add(sun);
-        
-        // Layer 1: Inner bright glow (immediate halo)
-        const layer1Geometry = new THREE.IcosahedronGeometry(0.35, 32);
-        const layer1Material = new THREE.MeshBasicMaterial({
-            color: 0xffff99,
-            transparent: true,
-            opacity: 0.6,
-            side: THREE.FrontSide,
-            toneMapped: false
-        });
-        const layer1 = new THREE.Mesh(layer1Geometry, layer1Material);
-        layer1.position.copy(sun.position);
-        this.scene.add(layer1);
-        
-        // Layer 2: Medium glow (soft glow)
-        const layer2Geometry = new THREE.IcosahedronGeometry(0.45, 32);
-        const layer2Material = new THREE.MeshBasicMaterial({
-            color: 0xffdd66,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.FrontSide,
-            toneMapped: false
-        });
-        const layer2 = new THREE.Mesh(layer2Geometry, layer2Material);
-        layer2.position.copy(sun.position);
-        this.scene.add(layer2);
-        
-        // Layer 3: Outer glow (corona - largest and most transparent)
-        const layer3Geometry = new THREE.IcosahedronGeometry(0.65, 32);
-        const layer3Material = new THREE.MeshBasicMaterial({
-            color: 0xffcc44,
-            transparent: true,
-            opacity: 0.2,
-            side: THREE.BackSide,
-            toneMapped: false
-        });
-        const layer3 = new THREE.Mesh(layer3Geometry, layer3Material);
-        layer3.position.copy(sun.position);
-        this.scene.add(layer3);
-        
-        // Layer 4: Far glow (very subtle, gives depth)
-        const layer4Geometry = new THREE.IcosahedronGeometry(1.0, 16);
-        const layer4Material = new THREE.MeshBasicMaterial({
-            color: 0xffaa00,
-            transparent: true,
-            opacity: 0.08,
-            side: THREE.BackSide,
-            toneMapped: false
-        });
-        const layer4 = new THREE.Mesh(layer4Geometry, layer4Material);
-        layer4.position.copy(sun.position);
-        this.scene.add(layer4);
-        
-        // Add point light at sun position for realistic lighting
-        const sunLight = new THREE.PointLight(0xffff88, 0.8, 50);
-        sunLight.position.copy(sun.position);
+
+        const sunGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+        sunCore.add(sunGlow); // Gắn quầng lửa đi theo quả cầu lõi
+
+        // ==========================================
+        // 3. ĐÈN CHIẾU SÁNG TRÁI ĐẤT (Giữ Nguyên)
+        // ==========================================
+        const sunLight = new THREE.PointLight(0xffffbb, 2.5, 200); 
+        sunLight.position.copy(sunCore.position);
         this.scene.add(sunLight);
         
-        console.log('✓ Realistic sun with 4-layer glow created');
+        console.log('✓ 3D Sun with Compact Soft Pulsating Glow created.');
     }
-    
     // Fallback procedural sun if jpg not found
     createSunTexture() {
         const canvas = document.createElement('canvas');
@@ -887,6 +952,7 @@ class EarthVRSimulation {
         if (this.clouds) {
             this.clouds.rotation.y += 0.001; // Clouds rotate WITH Earth (same speed - physics accurate)
         }
+       
         
         // Update camera position based on mouse
         this.updateCameraPosition();
@@ -906,6 +972,7 @@ class EarthVRSimulation {
     }
 
     // Main animation loop
+    // Main animation loop
     animate = () => {
         this.renderer.setAnimationLoop((time, frame) => {
             // Support both VR and desktop rendering
@@ -913,6 +980,15 @@ class EarthVRSimulation {
                 this.updateVRControls(frame);
             }
             
+            // =======================================================
+            // ✨ THÊM ĐOẠN NÀY ĐỂ MẶT TRỜI PHẬP PHỒNG VÀ CHÁY SÁNG ✨
+            // =======================================================
+            if (this.sunUniforms) {
+                // Biến 'time' của Three.js là mili-giây, nhân với 0.001 để ra giây
+                this.sunUniforms.uTime.value = time * 0.001; 
+            }
+            // =======================================================
+
             this.update();
             this.updateFPS();
             this.renderer.render(this.scene, this.camera);
