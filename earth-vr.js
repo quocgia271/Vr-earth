@@ -9,6 +9,7 @@ class EarthVRSimulation {
         this.camera = null;
         this.renderer = null;
         this.earth = null;
+        this.earthNight = null;
         this.clouds = null;
         this.frameCount = 0;
         this.lastTime = performance.now();
@@ -244,25 +245,72 @@ class EarthVRSimulation {
         // High-resolution sphere for smooth appearance
         const geometry = new THREE.IcosahedronGeometry(1, 64);
         
-        // Create Earth material with better properties for realism
-        const texture = this.createEarthTexture();
-        const material = new THREE.MeshPhongMaterial({
-            map: texture,
-            shininess: 10,              // Reduced from 25 for less bright reflections
-            emissive: 0x000000,         // NO self-illumination - use lighting only
-            specular: 0x222222,         // Reduced from 0x444444 for less gloss
+        // Create Day Earth material with regular texture
+        const dayTexture = this.createEarthTexture();
+        const dayMaterial = new THREE.MeshPhongMaterial({
+            map: dayTexture,
+            shininess: 10,
+            emissive: 0x000000,
+            specular: 0x222222,
             wireframe: false,
-            flatShading: false,         // Smooth shading
+            flatShading: false,
             side: THREE.FrontSide
         });
         
-        this.earth = new THREE.Mesh(geometry, material);
-        this.earth.receiveShadow = false;  // Disable shadow on Earth
+        this.earth = new THREE.Mesh(geometry, dayMaterial);
+        this.earth.receiveShadow = false;
         this.earth.castShadow = false;
         this.scene.add(this.earth);
         
+        // Create Night Earth with night map texture for city lights
+        const nightTexture = this.createNightmapTexture();
+        const nightMaterial = new THREE.MeshBasicMaterial({
+            map: nightTexture,
+            emissiveMap: nightTexture,
+            emissive: 0xffffff,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 1.0,
+            side: THREE.FrontSide,
+            blending: THREE.AdditiveBlending  // Add light on top
+        });
+        
+        this.earthNight = new THREE.Mesh(geometry, nightMaterial);
+        this.earthNight.position.z = 0.0001;  // Tiny offset to prevent z-fighting
+        this.scene.add(this.earthNight);
+        
         // Add atmospheric glow for realism
         this.addAtmosphericGlow();
+    }
+    
+    // Load night map texture
+    createNightmapTexture() {
+        const textureLoader = new THREE.TextureLoader();
+        let texture;
+        
+        try {
+            texture = textureLoader.load('./earth_nightmap.jpg');
+            console.log('✓ Night map texture loaded from earth_nightmap.jpg');
+        } catch (error) {
+            console.warn('⚠️ earth_nightmap.jpg not found - using fallback');
+            texture = this.createFallbackNightmapTexture();
+        }
+        
+        return texture;
+    }
+    
+    // Fallback procedural night map
+    createFallbackNightmapTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        
+        // Dark background for night
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        return new THREE.CanvasTexture(canvas);
     }
     
     // Add atmospheric glow effect around Earth
@@ -845,6 +893,9 @@ class EarthVRSimulation {
     update() {
         if (this.earth) {
             this.earth.rotation.y += 0.001; // Earth rotates
+        }
+        if (this.earthNight) {
+            this.earthNight.rotation.y += 0.001; // Night Earth rotates together
         }
         if (this.clouds) {
             this.clouds.rotation.y += 0.001; // Clouds rotate WITH Earth (same speed - physics accurate)
