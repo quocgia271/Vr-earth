@@ -63,7 +63,7 @@ class EarthVRSimulation {
             // Better color rendering
             this.renderer.outputColorSpace = THREE.SRGBColorSpace;
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            this.renderer.toneMappingExposure = 1.2;
+            this.renderer.toneMappingExposure = 0.8;  // Reduced from 1.2 for more detail
             
             document.getElementById('container').appendChild(this.renderer.domElement);
             console.log('✓ Renderer created with high-quality settings');
@@ -272,7 +272,7 @@ class EarthVRSimulation {
         const glowMaterial = new THREE.MeshBasicMaterial({
             color: 0x4499ff,
             transparent: true,
-            opacity: 0.12,             // Reduced from 0.25
+            opacity: 0.08,             // Reduced further for more visibility
             side: THREE.BackSide
         });
         const glow1 = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -283,7 +283,7 @@ class EarthVRSimulation {
         const glowMaterial2 = new THREE.MeshBasicMaterial({
             color: 0x2266ff,
             transparent: true,
-            opacity: 0.05,             // Reduced from 0.1
+            opacity: 0.03,             // Reduced further
             side: THREE.BackSide
         });
         const glow2 = new THREE.Mesh(glowGeometry2, glowMaterial2);
@@ -313,7 +313,7 @@ class EarthVRSimulation {
     // Setup lighting
     createLighting() {
         // Main Sun Light - MUCH STRONGER for visible day/night contrast
-        const sunLight = new THREE.DirectionalLight(0xfffbf0, 2.8);  // Increased from 2.0
+        const sunLight = new THREE.DirectionalLight(0xfffbf0, 1.5);  // Reduced to 1.5 for more detail
         sunLight.position.set(15, 8, 10);
         sunLight.castShadow = true;
         sunLight.shadow.mapSize.width = 4096;
@@ -338,7 +338,7 @@ class EarthVRSimulation {
         this.scene.add(backLight);
         
         // Ambient light - MUCH DARKER (key to creating day/night contrast)
-        const ambientLight = new THREE.AmbientLight(0x333344, 0.4);  // Reduced from 1.0
+        const ambientLight = new THREE.AmbientLight(0x333344, 0.25);  // Reduced to 0.25
         this.scene.add(ambientLight);
         
         // Hemisphere light - subtle
@@ -434,7 +434,7 @@ class EarthVRSimulation {
         this.scene.add(layer4);
         
         // Add point light at sun position for realistic lighting
-        const sunLight = new THREE.PointLight(0xffff88, 1.5, 50);
+        const sunLight = new THREE.PointLight(0xffff88, 0.8, 50);
         sunLight.position.copy(sun.position);
         this.scene.add(sunLight);
         
@@ -846,7 +846,7 @@ class EarthVRSimulation {
             this.earth.rotation.y += 0.001; // Earth rotates
         }
         if (this.clouds) {
-            this.clouds.rotation.y += 0.0012; // Clouds rotate slightly faster
+            this.clouds.rotation.y += 0.001; // Clouds rotate WITH Earth (same speed - physics accurate)
         }
         
         // Update camera position based on mouse
