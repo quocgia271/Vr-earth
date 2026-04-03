@@ -298,7 +298,7 @@ class EarthVRSimulation {
         const material = new THREE.MeshPhongMaterial({
             map: texture,
             transparent: true,
-            opacity: 0.15,             // Further reduced to 0.15 for very thin clouds
+            opacity: 0.20,             // Balanced at 0.20 for natural clouds
             emissive: 0x000000,        // NO self-illumination
             specular: 0x000000,        // No shiny reflections on clouds
             depthWrite: false,
