@@ -20,6 +20,11 @@ class EarthVRSimulation {
         this.controllers = {};
         this.hands = { left: null, right: null };
         this.gestures = { leftPinch: false, rightPinch: false, leftGrab: false, rightGrab: false };
+
+        this.isControllerGrabbing = false;
+        this.activeController = null;
+        this.previousControllerPosition = new THREE.Vector3();
+        
         
         this.init();
     }
@@ -769,7 +774,43 @@ class EarthVRSimulation {
         });
         
         console.log('✓ VR Controllers initialized');
+        // ---- THÊM ĐOẠN NÀY VÀO TRƯỚC DẤU NGOẶC NHỌN ĐÓNG CỦA HÀM ----
+        // Khởi tạo tay cầm 1 (Tay phải)
+        const controller1 = this.renderer.xr.getController(0);
+        controller1.addEventListener('selectstart', (e) => this.onSelectStart(e));
+        controller1.addEventListener('selectend', (e) => this.onSelectEnd(e));
+        this.scene.add(controller1);
+
+        // Khởi tạo tay cầm 2 (Tay trái)
+        const controller2 = this.renderer.xr.getController(1);
+        controller2.addEventListener('selectstart', (e) => this.onSelectStart(e));
+        controller2.addEventListener('selectend', (e) => this.onSelectEnd(e));
+        this.scene.add(controller2);
+
+        // Vẽ tia laser trắng để biết tay cầm đang chỉ đi đâu
+        const geometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, -1)
+        ]);
+        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffffff }));
+        line.scale.z = 5; // Tia dài 5 mét
+        controller1.add(line.clone());
+        controller2.add(line.clone());
+        // ---- KẾT THÚC THÊM CODE ----
     }
+    // ---- THÊM 2 HÀM MỚI NÀY ----
+    onSelectStart(event) {
+        this.isControllerGrabbing = true;
+        this.activeController = event.target;
+        // Lưu lại vị trí tay cầm ngay khoảnh khắc vừa bóp cò
+        this.previousControllerPosition.copy(this.activeController.position);
+    }
+
+    onSelectEnd(event) {
+        this.isControllerGrabbing = false;
+        this.activeController = null;
+    }
+    // ---------------------------
     
     // Update Hand Tracking Data
     updateHandTracking(frame) {
@@ -889,6 +930,27 @@ class EarthVRSimulation {
     updateVRControls(frame) {
         if (!this.isVR || !this.xrSession) return;
         
+       // ---- THÊM CODE ZOOM BẰNG CẦN GẠT TẠI ĐÂY ----
+        for (const source of this.xrSession.inputSources) {
+            // Đảm bảo thiết bị có gamepad và có đủ 4 trục (có thumbstick)
+            if (source.gamepad && source.gamepad.axes.length >= 4) {
+                const thumbstickX = source.gamepad.axes[2]; // Trục ngang (Trái/Phải)
+                const thumbstickY = source.gamepad.axes[3]; // Trục dọc (Lên/Xuống)
+                
+                // KHÓA HƯỚNG: 
+                // 1. Math.abs(thumbstickY) > 0.1: Bỏ qua vùng deadzone tránh trôi cần gạt
+                // 2. Math.abs(thumbstickY) > Math.abs(thumbstickX): Chỉ nhận khi lực đẩy dọc MẠNH HƠN lực đẩy ngang
+                if (Math.abs(thumbstickY) > 0.1 && Math.abs(thumbstickY) > Math.abs(thumbstickX)) {
+                    
+                    // Cập nhật targetDistance. Nhân với 0.05 để zoom mượt và không bị quá nhanh
+                    this.targetDistance += thumbstickY * 0.05; 
+                    
+                    // Giới hạn khoảng cách zoom giống như bản Desktop
+                    this.targetDistance = Math.max(1.5, Math.min(15, this.targetDistance));
+                }
+            }
+        }
+        // --------------------------------------------
         this.xrRefSpace = this.xrRefSpace || frame.session.requestReferenceSpace('local-floor');
         
         // Update hand tracking
@@ -909,6 +971,26 @@ class EarthVRSimulation {
                 }
             }
         }
+        // ---- THÊM ĐOẠN NÀY VÀO TRƯỚC DẤU NGOẶC NHỌN ĐÓNG CỦA HÀM ----
+        // Xử lý khi đang bóp giữ cò tay cầm
+        if (this.isControllerGrabbing && this.activeController) {
+            const currentPosition = this.activeController.position;
+            
+            // Tính khoảng cách tay cầm vung đi so với frame trước
+            const deltaX = currentPosition.x - this.previousControllerPosition.x;
+            const deltaY = currentPosition.y - this.previousControllerPosition.y;
+
+            // Xoay Camera ngược hướng vung tay để tạo cảm giác "kéo" Trái Đất
+            this.cameraRotation.y -= deltaX * 2.0; 
+            this.cameraRotation.x += deltaY * 2.0;
+
+            // Giới hạn không cho xoay camera lật ngược lên trên/xuống dưới
+            this.cameraRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.cameraRotation.x));
+
+            // Cập nhật vị trí để so sánh cho frame tiếp theo
+            this.previousControllerPosition.copy(currentPosition);
+        }
+        // ---- KẾT THÚC THÊM CODE ----
     }
 
     // Handle keyboard input
