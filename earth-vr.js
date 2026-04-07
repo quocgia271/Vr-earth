@@ -32,6 +32,7 @@ class EarthVRSimulation {
     // Initialize Three.js scene
     init() {
         try {
+            
             console.log('🌍 Starting Earth VR Simulation...');
             
             // Scene setup
@@ -69,6 +70,7 @@ class EarthVRSimulation {
             this.renderer.outputColorSpace = THREE.SRGBColorSpace;
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
             this.renderer.toneMappingExposure = 0.8;  // Reduced from 1.2 for more detail
+            this.renderer.xr.enabled = true;
             
             document.getElementById('container').appendChild(this.renderer.domElement);
             console.log('✓ Renderer created with high-quality settings');
@@ -92,7 +94,20 @@ class EarthVRSimulation {
             
             this.createLighting();
             console.log('✓ Lighting created (3-point system)');
-            
+            // ✨ ĐOẠN CODE MỚI CẦN THÊM VÀO ĐÚNG CHỖ NÀY
+            // ==========================================
+            this.universeGroup = new THREE.Group();
+            this.scene.add(this.universeGroup);
+
+            // Gom các đối tượng vào Group. 
+            // (Three.js sẽ tự động lấy chúng ra khỏi scene cũ để đưa vào group mới)
+            if (this.earth) this.universeGroup.add(this.earth);
+            if (this.clouds) this.universeGroup.add(this.clouds);
+            if (this.sun) this.universeGroup.add(this.sun); // Dùng this.sun thay vì sunCore
+
+            // Đặt toàn bộ hệ thống lên ngang tầm mắt (cao 1.5m, lùi ra xa 2.5m)
+            this.universeGroup.position.set(0, 1.5, -2.5);
+            // ==========================================
             // Setup controls
             this.setupControls();
             console.log('✓ Controls setup');
@@ -663,54 +678,90 @@ class EarthVRSimulation {
 
     // ============ VR SUPPORT METHODS ============
     
-    // Initialize WebXR for Meta Quest VR
-    async initializeWebXR() {
-        if (!navigator.xr) {
-            console.log('⚠️ WebXR not supported - Desktop mode only');
-            return;
-        }
-        
-        try {
-            // Enable XR on renderer
-            const supported = await navigator.xr.isSessionSupported('immersive-vr');
-            if (supported) {
-                // Add VR entry button
-                this.createVRButton();
-                console.log('✓ WebXR VR mode available');
-            } else {
-                console.log('⚠️ VR not supported on this device');
-            }
-        } catch (error) {
-            console.log('⚠️ WebXR check failed:', error);
-        }
+ // 1. Cập nhật hàm kiểm tra để LUÔN LUÔN tạo nút
+ async initializeWebXR() {
+    if (!navigator.xr) {
+        console.log('⚠️ WebXR not supported - Desktop mode only');
+        this.createVRButton(false); // Vẫn tạo nút nhưng truyền false
+        return;
     }
     
+    try {
+        const supported = await navigator.xr.isSessionSupported('immersive-vr');
+        this.createVRButton(supported); // Truyền trạng thái thật
+    } catch (error) {
+        console.log('⚠️ WebXR check failed:', error);
+        this.createVRButton(false);
+    }
+}
     // Create VR Entry Button
-    createVRButton() {
-        const button = document.createElement('button');
-        button.textContent = '🥽 Enter VR Mode';
-        button.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 12px 24px;
-            background: #00ff88;
-            color: #000;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-            z-index: 1000;
-            transition: all 0.3s;
-        `;
-        button.onmouseover = () => button.style.background = '#00ff99';
-        button.onmouseout = () => button.style.background = '#00ff88';
-        button.onclick = () => this.enterVRMode();
-        document.body.appendChild(button);
-        this.vrButton = button;
-    }
+   // 2. Vẽ lại nút bằng biểu tượng SVG y hệt ảnh bạn gửi
+   createVRButton(isSupported) {
+    // Xóa nút cũ nếu có
+    if (this.vrButton) this.vrButton.remove();
+
+    const button = document.createElement('button');
     
+    // Thay thế bằng icon kính và chữ
+    button.innerHTML = '🥽 Enter VR';
+
+    // Điều chỉnh CSS thành nút hình viên thuốc (pill-shape) cho đẹp mắt
+    button.style.cssText = `
+        position: fixed !important;
+        bottom: 20px !important;
+        right: 20px !important;
+        padding: 12px 24px !important;
+        background: rgba(0, 0, 0, 0.7) !important;
+        color: white !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+        font-size: 15px !important;
+        font-weight: bold !important;
+        border: 2px solid rgba(255, 255, 255, 0.6) !important;
+        border-radius: 30px !important; /* Bo tròn mạnh tạo hình viên thuốc */
+        cursor: pointer !important;
+        z-index: 1000 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+        transition: all 0.3s ease !important;
+    `;
+
+    // Hiệu ứng hover khi di chuột vào
+    button.onmouseover = () => {
+        button.style.background = 'rgba(255, 255, 255, 0.15)';
+        button.style.borderColor = '#ffffff';
+        button.style.transform = 'scale(1.05)';
+    };
+    
+    // Hiệu ứng khi đưa chuột ra
+    button.onmouseout = () => {
+        button.style.background = 'rgba(0, 0, 0, 0.7)';
+        button.style.borderColor = 'rgba(255, 255, 255, 0.6)';
+        button.style.transform = 'scale(1)';
+    };
+
+    button.onclick = () => {
+        if (isSupported) {
+            // Nếu có kính Meta Quest, vào thẳng VR
+            this.enterVRMode();
+        } else {
+            // Nếu chạy trên PC, click vào sẽ phóng to toàn màn hình
+            if (!document.fullscreenElement) {
+                document.body.requestFullscreen().catch(err => {
+                    console.log('Lỗi không thể phóng to màn hình:', err);
+                });
+                button.innerHTML = '🥽 Exit Fullscreen'; // Đổi chữ khi đang ở toàn màn hình
+            } else {
+                document.exitFullscreen();
+                button.innerHTML = '🥽 Enter VR'; // Trả lại chữ cũ
+            }
+        }
+    };
+
+    document.body.appendChild(button);
+    this.vrButton = button;
+}
     // Enter VR Mode
     async enterVRMode() {
         try {
@@ -940,14 +991,14 @@ class EarthVRSimulation {
                 // KHÓA HƯỚNG: 
                 // 1. Math.abs(thumbstickY) > 0.1: Bỏ qua vùng deadzone tránh trôi cần gạt
                 // 2. Math.abs(thumbstickY) > Math.abs(thumbstickX): Chỉ nhận khi lực đẩy dọc MẠNH HƠN lực đẩy ngang
-                if (Math.abs(thumbstickY) > 0.1 && Math.abs(thumbstickY) > Math.abs(thumbstickX)) {
-                    
-                    // Cập nhật targetDistance. Nhân với 0.05 để zoom mượt và không bị quá nhanh
-                    this.targetDistance += thumbstickY * 0.05; 
-                    
-                    // Giới hạn khoảng cách zoom giống như bản Desktop
-                    this.targetDistance = Math.max(1.5, Math.min(15, this.targetDistance));
-                }
+               // Trong đoạn xử lý gamepad thumbstick:
+if (Math.abs(thumbstickY) > 0.1 && Math.abs(thumbstickY) > Math.abs(thumbstickX)) {
+    // Đẩy vũ trụ ra xa hoặc kéo lại gần dọc theo trục Z
+    this.universeGroup.position.z -= thumbstickY * 0.05; 
+    
+    // Giới hạn khoảng cách không cho bay đi quá xa hoặc đập vào mặt
+    this.universeGroup.position.z = Math.max(-10, Math.min(-1, this.universeGroup.position.z));
+}
             }
         }
         // --------------------------------------------
@@ -973,23 +1024,19 @@ class EarthVRSimulation {
         }
         // ---- THÊM ĐOẠN NÀY VÀO TRƯỚC DẤU NGOẶC NHỌN ĐÓNG CỦA HÀM ----
         // Xử lý khi đang bóp giữ cò tay cầm
-        if (this.isControllerGrabbing && this.activeController) {
-            const currentPosition = this.activeController.position;
-            
-            // Tính khoảng cách tay cầm vung đi so với frame trước
-            const deltaX = currentPosition.x - this.previousControllerPosition.x;
-            const deltaY = currentPosition.y - this.previousControllerPosition.y;
+        // Thay thế đoạn xử lý isControllerGrabbing:
+if (this.isControllerGrabbing && this.activeController) {
+    const currentPosition = this.activeController.position;
+    const deltaX = currentPosition.x - this.previousControllerPosition.x;
+    const deltaY = currentPosition.y - this.previousControllerPosition.y;
 
-            // Xoay Camera ngược hướng vung tay để tạo cảm giác "kéo" Trái Đất
-            this.cameraRotation.y -= deltaX * 2.0; 
-            this.cameraRotation.x += deltaY * 2.0;
+    // Xoay Group vũ trụ theo tay kéo
+    this.universeGroup.rotation.y += deltaX * 5.0; 
+    this.universeGroup.rotation.x += deltaY * 5.0;
 
-            // Giới hạn không cho xoay camera lật ngược lên trên/xuống dưới
-            this.cameraRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.cameraRotation.x));
+    this.previousControllerPosition.copy(currentPosition);
+}
 
-            // Cập nhật vị trí để so sánh cho frame tiếp theo
-            this.previousControllerPosition.copy(currentPosition);
-        }
         // ---- KẾT THÚC THÊM CODE ----
     }
 
