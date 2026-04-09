@@ -25,6 +25,9 @@ class EarthVRSimulation {
         this.activeController = null;
         this.previousControllerPosition = new THREE.Vector3();
         
+        this.tempSunPos = new THREE.Vector3();
+        this.tempEarthPos = new THREE.Vector3();
+        this.tempSunDir = new THREE.Vector3();
         
         this.init();
     }
@@ -1035,18 +1038,25 @@ if (Math.abs(thumbstickY) > 0.1 && Math.abs(thumbstickY) > Math.abs(thumbstickX)
         // ---- THÊM ĐOẠN NÀY VÀO TRƯỚC DẤU NGOẶC NHỌN ĐÓNG CỦA HÀM ----
         // Xử lý khi đang bóp giữ cò tay cầm
         // Thay thế đoạn xử lý isControllerGrabbing:
+// Xử lý khi đang bóp giữ cò tay cầm
 if (this.isControllerGrabbing && this.activeController) {
     const currentPosition = this.activeController.position;
     const deltaX = currentPosition.x - this.previousControllerPosition.x;
     const deltaY = currentPosition.y - this.previousControllerPosition.y;
 
-    // Xoay Group vũ trụ theo tay kéo
-    this.universeGroup.rotation.y += deltaX * 5.0; 
-    this.universeGroup.rotation.x += deltaY * 5.0;
+    // 1. TĂNG TỐC ĐỘ XOAY DÀNH CHO KÍNH THẬT
+    // Tăng hệ số từ 5.0 lên 25.0 (Bạn có thể tăng/giảm số này tùy theo cảm giác tay)
+    const rotationSpeed = 25.0;
+
+    // 2. CHỈNH LẠI HƯỚNG VUỐT
+    // Kéo trái/phải: Giữ nguyên phép CỘNG (+)
+    this.universeGroup.rotation.y += deltaX * rotationSpeed; 
+    
+    // Kéo lên/xuống: Đổi thành phép TRỪ (-) để vuốt lên xoay lên, vuốt xuống xoay xuống
+    this.universeGroup.rotation.x -= deltaY * rotationSpeed;
 
     this.previousControllerPosition.copy(currentPosition);
 }
-
         // ---- KẾT THÚC THÊM CODE ----
     }
 
@@ -1092,19 +1102,18 @@ if (this.isControllerGrabbing && this.activeController) {
             this.clouds.rotation.y += 0.001; // Clouds rotate WITH Earth (same speed - physics accurate)
         }
        // Bổ sung: CẬP NHẬT HƯỚNG SÁNG CHO SHADER LIÊN TỤC
-       if (this.sun && this.earth && this.earthUniforms) {
-        const sunWorldPos = new THREE.Vector3();
-        const earthWorldPos = new THREE.Vector3();
-
-        // Lấy tọa độ tuyệt đối (World Position) hiện hành của Mặt Trời và Trái Đất
-        this.sun.getWorldPosition(sunWorldPos);
-        this.earth.getWorldPosition(earthWorldPos);
+      // Bổ sung: CẬP NHẬT HƯỚNG SÁNG CHO SHADER LIÊN TỤC
+      if (this.sun && this.earth && this.earthUniforms) {
+           
+        // SỬ DỤNG LẠI BIẾN ĐÃ TẠO Ở CONSTRUCTOR, KHÔNG DÙNG "new" ĐỂ KHÔNG TẠO RÁC
+        this.sun.getWorldPosition(this.tempSunPos);
+        this.earth.getWorldPosition(this.tempEarthPos);
 
         // Tính vector hướng chiếu sáng từ Trái Đất tới Mặt Trời
-        const sunDirection = new THREE.Vector3().subVectors(sunWorldPos, earthWorldPos).normalize();
+        this.tempSunDir.subVectors(this.tempSunPos, this.tempEarthPos).normalize();
 
         // Cập nhật hướng này vào Custom Shader
-        this.earthUniforms.sunPosition.value.copy(sunDirection);
+        this.earthUniforms.sunPosition.value.copy(this.tempSunDir);
     }
         
         // Update camera position based on mouse
